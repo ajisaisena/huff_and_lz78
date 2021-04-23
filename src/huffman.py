@@ -1,4 +1,8 @@
+import contextlib
+
 from errors import InputError
+from bit_stream import BitOutStream
+import json
 
 
 class Node:
@@ -8,7 +12,7 @@ class Node:
 
 
 class Branch(Node):
-    def __init__(self, left, right, symbol='', count=0):
+    def __init__(self, left, right, symbol=(), count=0):
         super().__init__(count, symbol)
         if not isinstance(left, Node) or not isinstance(right, Node):
             raise TypeError("You may get invalid Node format.")
@@ -17,13 +21,13 @@ class Branch(Node):
 
 
 class Leaf(Node):
-    def __init__(self, word, count=0, symbol=''):
+    def __init__(self, word, count=0, symbol=()):
         super().__init__(count, symbol)
         self.word = word
 
 
 class Tree(Node):
-    def __init__(self, left, right, count=0, symbol=''):
+    def __init__(self, left, right, count=0, symbol=()):
         super().__init__(count, symbol)
         if not isinstance(left, Node) or not isinstance(right, Node):
             raise TypeError("You may get invalid Node format.")
@@ -62,9 +66,9 @@ def binary_position(key, array):
     high = len(array) - 1
     while low <= high:
         mid = (low + high) // 2
-        if key.count < array[mid].count:
+        if key.count > array[mid].count:
             high = mid - 1
-        elif key.count > array[mid].count:
+        elif key.count < array[mid].count:
             low = mid + 1
         else:
             return mid
@@ -83,7 +87,7 @@ def frequency_count(text):
         if flag == 0:
             result[position].count += 1
         else:
-            result.insert(position, Leaf(word))
+            result.insert(position, Leaf(word, count=1))
     result.sort(key=lambda x: x.count, reverse=True)
     return result
 
@@ -115,12 +119,12 @@ def symbol_add(node, dic):
     :param node: 应当是一个Tree或Branch型
     :return: void.
     """
-    node.left.symbol = node.symbol + '0'
+    node.left.symbol = node.symbol + (0,)
     if not isinstance(node.left, Leaf):
         symbol_add(node.left, dic)
     else:
         dic[node.left.word] = node.left.symbol
-    node.right.symbol = node.symbol + '1'
+    node.right.symbol = node.symbol + (1,)
     if not isinstance(node.right, Leaf):
         symbol_add(node.right, dic)
     else:
@@ -128,12 +132,33 @@ def symbol_add(node, dic):
 
 
 def huffman_encoder(filename):
+    """
+    哈夫曼编码函数
+    :param filename:编码文件名称
+    :return:void
+    """
     with open(filename, 'rb') as f:
         text = f.read()
         if text == -1:
-            raise ValueError("You are reading a empty file. Check the file name and try again later.")
+            raise ValueError(
+                "You are reading a empty file. Check the file name and try again later.")
+    f.close()
     word_list = frequency_count(text)
     root = tree_build(word_list)
     code_dict = {}
     symbol_add(root, code_dict)
+    with open(filename + '.json', 'w') as code_table:
+        json.dump(code_dict, code_table)
+    code_table.close()
+    with contextlib.closing(BitOutStream(open(filename + '.enc', 'wb'))) as out:
+        for word in text:
+            for bit in code_dict[word]:
+                out.write(bit)
 
+
+def main():
+    huffman_encoder('README.md')
+
+
+if __name__ == '__main__':
+    main()
