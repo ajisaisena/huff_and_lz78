@@ -1,7 +1,7 @@
 import contextlib
-
 from errors import InputError
 from bit_stream import BitOutStream
+from bit_stream import BitInStream
 import json
 
 
@@ -55,33 +55,13 @@ def binary_search(key, array):
     return [1, low]
 
 
-def binary_position(key, array):
-    """
-    用于插入Branch型时的二分查找
-    :param key: 需要插入的Branch, Branch
-    :param array: word list, list
-    :return: 位置，该函数设定新插入的Branch永远居前
-    """
-    low = 0
-    high = len(array) - 1
-    while low <= high:
-        mid = (low + high) // 2
-        if key.count > array[mid].count:
-            high = mid - 1
-        elif key.count < array[mid].count:
-            low = mid + 1
-        else:
-            return mid
-    return low
-
-
 def frequency_count(text):
     """
     用于统计词频的函数
     :param text: 文本字节，bytes
     :return: word list, list
     """
-    result = []
+    result = [Leaf(256, count=1)]
     for word in text:
         flag, position = binary_search(word, result)
         if flag == 0:
@@ -107,15 +87,17 @@ def tree_build(word_list):
         a = word_list.pop()
         b = word_list.pop()
         c = Branch(a, b, count=a.count + b.count)
-        position = binary_position(c, word_list)
-        word_list.insert(position, c)
+        word_list.insert(0, c)
+        word_list.sort(key=lambda x: x.count, reverse=True)
+        # position = binary_position(c, word_list)
+        # word_list.insert(position, c)
     return Tree(word_list[0], word_list[1])
 
 
 def symbol_add(node, dic):
     """
     为Huffman树完成编码
-    :param dic: 码表，应当由调用者上传，并且为空
+    :param dic: 码表，应当由调用者上传，并且为空,list
     :param node: 应当是一个Tree或Branch型
     :return: void.
     """
@@ -123,11 +105,17 @@ def symbol_add(node, dic):
     if not isinstance(node.left, Leaf):
         symbol_add(node.left, dic)
     else:
+        if dic[node.left.word] is not None:
+            raise ValueError(
+                "You are covering symbol of %d. Check your environment." % node.left.word)
         dic[node.left.word] = node.left.symbol
     node.right.symbol = node.symbol + (1,)
     if not isinstance(node.right, Leaf):
         symbol_add(node.right, dic)
     else:
+        if dic[node.right.word] is not None:
+            raise ValueError(
+                "You are covering symbol of %d. Check your environment." % node.right.word)
         dic[node.right.word] = node.right.symbol
 
 
@@ -145,19 +133,92 @@ def huffman_encoder(filename):
     f.close()
     word_list = frequency_count(text)
     root = tree_build(word_list)
-    code_dict = {}
+    code_dict = [None] * 257
     symbol_add(root, code_dict)
     with open(filename + '.json', 'w') as code_table:
         json.dump(code_dict, code_table)
     code_table.close()
     with contextlib.closing(BitOutStream(open(filename + '.enc', 'wb'))) as out:
         for word in text:
+            if code_dict[word] is None:
+                raise ValueError(
+                    "You are trying to encode a word without huffman encoding.")
             for bit in code_dict[word]:
                 out.write(bit)
+        for bit in code_dict[256]:
+            out.write(bit)
+
+
+def rebuild_tree(filename):
+    """
+    解码部分重建树
+    :param filename:文件名称
+    :return: 码树之根
+    """
+    heap = []
+    with open(filename, 'r') as f:
+        origin = json.load(f)
+    for (i, symbol) in enumerate(origin):
+        if symbol is not None:
+            heap.append(Leaf(i, symbol=symbol))
+    heap.sort(key=lambda x: x.symbol)
+    heap.sort(key=lambda x: len(x.symbol))
+    if len(heap) == 1:
+        return Tree(heap[0], Node())
+    while len(heap) != 2:
+        a = heap.pop()
+        b = heap.pop()
+        if a.symbol[:-1] != b.symbol[:-1]:
+            raise ValueError(
+                "The Code may have something wrong. Have you changed or replaced it?")
+        heap.append(Branch(b, a, a.symbol[:-1]))
+        heap.sort(key=lambda x: x.symbol)
+        heap.sort(key=lambda x: len(x.symbol))
+    root = Tree(heap[0], heap[1])
+    return root
+
+
+def read(tree, stream):
+    """
+    解码用的读取和翻译函数
+    :param tree: 码数之根
+    :param stream: 字节流
+    :return: 下一个读取到的字符
+    """
+    node = tree
+    while True:
+        temp = stream.read_without_EOF()
+        if temp == 0:
+            next_node = node.left
+        elif temp == 1:
+            next_node = node.right
+        else:
+            raise ValueError("Read File Error when we try to decode.")
+        if isinstance(next_node, Leaf):
+            return next_node.word
+        elif isinstance(next_node, Branch):
+            node = next_node
+        else:
+            raise TypeError("All node in the tree should be Branch or Leaf.")
+
+
+def huffman_decode(filename):
+    if len(filename) < 4:
+        raise ValueError("Program won't receive a file that is not extracted by this program.You may rename the "
+                         "file.Change it back or at least end with '.enc'.")
+    root = rebuild_tree(filename[:-4] + '.json')
+    with open(filename, 'rb') as inp, open(filename[:-4]+'.dec', 'wb') as out:
+        stream = BitInStream(inp)
+        while True:
+            symbol = read(root, stream)
+            if symbol == 256:
+                break
+            out.write(bytes((symbol,)))
 
 
 def main():
-    huffman_encoder('README.md')
+    huffman_encoder('image_8815.png')
+    huffman_decode('image_8815.png.enc')
 
 
 if __name__ == '__main__':
