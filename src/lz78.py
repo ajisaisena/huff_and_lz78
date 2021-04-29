@@ -16,7 +16,7 @@ def lz78_encode(in_stream, out_stream):
     while i < len(text):
         if text[i:i + 1] not in dic.keys():
             dic[text[i:i + 1]] = len(dic) + 1
-            out_stream.write(b'0' + text[i:i + 1])
+            out_stream.write(b'0' + b'\r' + text[i:i + 1])
             i += 1
         elif i == len(text) - 1:
             out_stream.write(bytes(str(dic[text[i:i + 1]]), encoding='utf-8'))
@@ -26,7 +26,7 @@ def lz78_encode(in_stream, out_stream):
                 if text[i:j + 1] not in dic.keys():
                     dic[text[i:j + 1]] = len(dic) + 1
                     out_stream.write(
-                        bytes(str(dic[text[i:j]]), encoding='utf-8') + text[j:j + 1])
+                        bytes(str(dic[text[i:j]]), encoding='utf-8') + b'\r' + text[j:j + 1])
                     i = j + 1
                     break
                 elif j == len(text) - 1:
@@ -58,19 +58,16 @@ def lz78_decode(in_stream, out_stream):
                 out_stream.write(dic[int(text[j:i + 1])])
                 result += dic[int(text[j:i + 1])]
                 return
-            elif text[j:i] == b'0':
-                break
-            elif int(text[j:i]) not in dic.keys():
-                i -= 1
-                break
+        if j == i:
+            print('You may get something wrong. The lz78 format need a number as prefix.')
         num = text[j:i]
         if num == b'0':
-            dic[len(dic) + 1] = text[i:i + 1]
+            dic[len(dic) + 1] = text[i + 1:i + 2]
         else:
-            dic[len(dic) + 1] = dic[int(num)] + text[i:i + 1]
+            dic[len(dic) + 1] = dic[int(num)] + text[i+1:i + 2]
         out_stream.write(dic[len(dic)])
         result += dic[len(dic)]
-        i += 1
+        i += 2
 
 
 def lz78_enc_set(filename, outname=None):
@@ -98,20 +95,3 @@ def lz78_dec_set(filename, outname=None):
     outfile = filename[:-4] + '.dec' if outname is None else outname
     with open(filename, 'rb') as inp, open(outfile, 'wb') as out:
         lz78_decode(inp, out)
-
-
-def main():
-    inp = open('draw.bmp', 'rb')
-    out = open('draw.bmp.enc', 'wb')
-    lz78_encode(inp, out)
-    inp.close()
-    out.close()
-    ind = open('draw.bmp.enc', 'rb')
-    oud = open('draw.bmp.dec', 'wb')
-    lz78_decode(ind, oud)
-    ind.close()
-    oud.close()
-
-
-if __name__ == '__main__':
-    main()

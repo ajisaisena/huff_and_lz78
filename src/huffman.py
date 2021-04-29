@@ -43,6 +43,7 @@ class Tree(Node):
     """
     用于存储跟节点的类
     """
+
     def __init__(self, left, right, count=0, symbol=()):
         super().__init__(count, symbol)
         if not isinstance(left, Node) or not isinstance(right, Node):
@@ -99,7 +100,7 @@ def tree_build(word_list):
         raise InputError("No word!", "you input a empty word list!")
     if len(word_list) == 1:
         return Tree(word_list[0], Node())
-    while len(word_list) != 2:
+    while len(word_list) != 2:  # 合并
         a = word_list.pop()
         b = word_list.pop()
         c = Branch(a, b, count=a.count + b.count)
@@ -158,14 +159,15 @@ def huffman_encode(in_stream, table_stream, out_stream):
     root = tree_build(word_list)
     code_dict = [None] * 257
     symbol_add(root, code_dict)
-    json.dump(code_dict, table_stream)
+    json.dump(code_dict, table_stream)  # json输出码表
+    #outs = HexOutStream(out_stream) if is_std_out else out_stream
     with contextlib.closing(BitOutStream(out_stream)) as out:
         for word in text:
             if code_dict[word] is None:
                 raise ValueError(
                     "You are trying to encode a word without huffman encoding.")
             for bit in code_dict[word]:
-                out.write(bit)
+                out.write(bit)  # 逐位输出到自定义的比特流中
         for bit in code_dict[256]:
             out.write(bit)
 
@@ -192,8 +194,8 @@ def rebuild_tree(in_stream):
             raise ValueError(
                 "The Code may have something wrong. Have you changed or replaced it?")
         heap.append(Branch(b, a, a.symbol[:-1]))
-        heap.sort(key=lambda x: x.symbol)
-        heap.sort(key=lambda x: len(x.symbol))
+        heap.sort(key=lambda x: x.symbol)  # 以其编码进行排序，保证两个相邻编码尽可能紧挨
+        heap.sort(key=lambda x: len(x.symbol))  # 以其码长进行排序，重新组建
     root = Tree(heap[0], heap[1])
     return root
 
@@ -240,24 +242,27 @@ def huffman_decode(in_stream, table_stream, out_stream):
             out.write(bytes((symbol,)))
 
 
-def huff_enc_set(filename, out_name=None):
+def huff_enc_set(filename, table_name=None, out_name=None):
     """
     huffman编码API
+    :param table_name: 码表名称，默认filename.json
     :param filename:文件名称
     :param out_name: 输出名称，默认filename.enc
     :return: void
     """
     # if not is_std_out:
     out_file = filename + '.enc' if out_name is None else out_name
-    with open(filename, 'rb') as inp, open(filename + '.json', 'w') as table, open(out_file, 'wb') as out:
+    table_file = out_file + '.json' if table_name is None else table_name
+    with open(filename, 'rb') as inp, open(table_file, 'w') as table, open(out_file, 'wb') as out:
         huffman_encode(inp, table, out)
     # else:
     #     huffman_encode(sys.stdin, sys.stdout, sys.stdout, is_std_out=True)
 
 
-def huff_dec_set(filename, out_name=None):
+def huff_dec_set(filename, table_name=None, out_name=None):
     """
     huffman解码API
+    :param table_name: 码表名称
     :param filename:文件名称
     :param out_name: 输出名称，默认filename[:-4].dec
     :return:
@@ -267,15 +272,6 @@ def huff_dec_set(filename, out_name=None):
         raise ValueError("Program won't receive a file that is not extracted by this program.You may rename the "
                          "file. Change it back or at least end with '.enc'.")
     out_file = filename[:-4] + '.dec' if out_name is None else out_name
-    json_file = filename[:-4] + '.json'
+    json_file = filename + '.json' if table_name is None else table_name
     with open(filename, 'rb') as inp, open(json_file, 'r') as table, open(out_file, 'wb') as out:
         huffman_decode(inp, table, out)
-
-
-def main():
-    huff_enc_set('draw.bmp')
-    huff_dec_set('draw.bmp.enc')
-
-
-if __name__ == '__main__':
-    main()

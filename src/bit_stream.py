@@ -1,3 +1,6 @@
+import binascii
+
+
 class BitOutStream:
     """
     为（huffman）编码使用的比特流类
@@ -90,3 +93,33 @@ class BitInStream:
         self.inp.close()
         self.buffer = -1
         self.buff_len = 0
+
+
+class HexOutStream:
+    """
+    Huffman 16进制标准输出流改造
+    """
+
+    def __init__(self, out):
+        self.output = out
+
+    def write(self, byte):
+        self.output.write(binascii.b2a_hex(byte).decode())
+
+    def close(self):
+        self.output.close()
+
+
+class StrOutStream:
+    """
+    Lz78 字符串标准输出流改造
+    """
+
+    def __init__(self, out):
+        self.output = out
+
+    def write(self, byte):
+        self.output.write(byte.decode())
+
+    def close(self):
+        self.output.close()
